@@ -38,7 +38,7 @@ def default_loader(path):
 
 class CIFAR10_truncated(data.Dataset):
 
-    def __init__(self, root, dataidxs=None, train=True, transform=None, target_transform=None, download=False):
+    def __init__(self, root, dataidxs=None, train=True, transform=None, target_transform=None, download=False,repeate = False):
 
         self.root = root
         self.dataidxs = dataidxs
@@ -50,7 +50,7 @@ class CIFAR10_truncated(data.Dataset):
         self.data, self.target = self.__build_truncated_dataset__()
 
     def __build_truncated_dataset__(self):
-        print("download = " + str(self.download))
+        # print("download = " + str(self.download))
         cifar_dataobj = CIFAR10(self.root, self.train, self.transform, self.target_transform, self.download)
 
         if self.train:

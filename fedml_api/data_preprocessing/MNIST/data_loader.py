@@ -122,4 +122,34 @@ def load_partition_data_mnist(batch_size,
     class_num = 10
 
     return client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
-           train_data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num
+        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num
+
+# def get_client_idxes_dict( data_dir, partition_method, partition_alpha, client_number):
+#     X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts = partition_data("",
+#                                                                                              data_dir,
+#                                                                                              partition_method,
+#                                                                                              client_number,
+#                                                                                              partition_alpha)
+#     class_num = len(np.unique(y_train))
+#     logging.info("traindata_cls_counts = " + str(traindata_cls_counts))
+#     train_data_num = sum([len(net_dataidx_map[r]) for r in range(client_number)])
+#     logging.info("total data num = " + str(train_data_num))
+#     return net_dataidx_map,class_num
+
+
+# def get_client_dataloader(data_dir, batch_size, net_dataidx_map, val_batchsize = 16, client_idx = None,train = True):
+
+#     if train:
+#         dataidxs = net_dataidx_map[client_idx]
+#         train_idx = dataidxs[:int(len(dataidxs)*0.9)]
+#         val_idx = dataidxs[int(len(dataidxs)*0.9):]
+#         train_data_local, test_data_local = get_dataloader("", data_dir, batch_size, batch_size,
+#                                                  train_idx)
+#         val_data_local, test_data_local = get_dataloader("", data_dir, val_batchsize, val_batchsize,
+#                                                  val_idx)
+
+#         logging.info("train batch: {0},val batch: {1}".format(len(train_data_local),len(val_data_local)))
+#         return train_data_local, val_data_local
+#     else:
+#         train_data_global, test_data_global = get_dataloader("", data_dir, batch_size, batch_size)
+#         return test_data_global

@@ -4,124 +4,102 @@ import numpy as np
 import torch
 import torch.utils.data as data
 import torchvision.transforms as transforms
+from torchvision.datasets import EMNIST
 
-from .datasets import CIFAR10_truncated
+from .datasets import EMNIST_truncated
 
 #logging.basicConfig()
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+train_dataset_global = None
+test_dataset_global = None
 
 # generate the non-IID distribution for all methods
-def read_data_distribution(filename='./data_preprocessing/non-iid-distribution/CIFAR10/distribution.txt'):
-    distribution = {}
-    with open(filename, 'r') as data:
-        for x in data.readlines():
-            if '{' != x[0] and '}' != x[0]:
-                tmp = x.split(':')
-                if '{' == tmp[1].strip():
-                    first_level_key = int(tmp[0])
-                    distribution[first_level_key] = {}
-                else:
-                    second_level_key = int(tmp[0])
-                    distribution[first_level_key][second_level_key] = int(tmp[1].strip().replace(',', ''))
-    return distribution
+# def read_data_distribution(filename='./data_preprocessing/non-iid-distribution/CIFAR10/distribution.txt'):
+#     distribution = {}
+#     with open(filename, 'r') as data:
+#         for x in data.readlines():
+#             if '{' != x[0] and '}' != x[0]:
+#                 tmp = x.split(':')
+#                 if '{' == tmp[1].strip():
+#                     first_level_key = int(tmp[0])
+#                     distribution[first_level_key] = {}
+#                 else:
+#                     second_level_key = int(tmp[0])
+#                     distribution[first_level_key][second_level_key] = int(tmp[1].strip().replace(',', ''))
+#     return distribution
 
 
-def read_net_dataidx_map(filename='./data_preprocessing/non-iid-distribution/CIFAR10/net_dataidx_map.txt'):
-    net_dataidx_map = {}
-    with open(filename, 'r') as data:
-        for x in data.readlines():
-            if '{' != x[0] and '}' != x[0] and ']' != x[0]:
-                tmp = x.split(':')
-                if '[' == tmp[-1].strip():
-                    key = int(tmp[0])
-                    net_dataidx_map[key] = []
-                else:
-                    tmp_array = x.split(',')
-                    net_dataidx_map[key] = [int(i.strip()) for i in tmp_array]
-    return net_dataidx_map
+# def read_net_dataidx_map(filename='./data_preprocessing/non-iid-distribution/CIFAR10/net_dataidx_map.txt'):
+#     net_dataidx_map = {}
+#     with open(filename, 'r') as data:
+#         for x in data.readlines():
+#             if '{' != x[0] and '}' != x[0] and ']' != x[0]:
+#                 tmp = x.split(':')
+#                 if '[' == tmp[-1].strip():
+#                     key = int(tmp[0])
+#                     net_dataidx_map[key] = []
+#                 else:
+#                     tmp_array = x.split(',')
+#                     net_dataidx_map[key] = [int(i.strip()) for i in tmp_array]
+#     return net_dataidx_map
 
 
-def record_net_data_stats(y_train, net_dataidx_map):
-    net_cls_counts = {}
+# def record_net_data_stats(y_train, net_dataidx_map):
+#     net_cls_counts = {}
 
-    for net_i, dataidx in net_dataidx_map.items():
-        unq, unq_cnt = np.unique(y_train[dataidx], return_counts=True)
-        tmp = {unq[i]: unq_cnt[i] for i in range(len(unq))}
-        net_cls_counts[net_i] = tmp
-    logging.debug('Data statistics: %s' % str(net_cls_counts))
-    return net_cls_counts
-
-
-class Cutout(object):
-    def __init__(self, length):
-        self.length = length
-
-    def __call__(self, img):
-        h, w = img.size(1), img.size(2)
-        mask = np.ones((h, w), np.float32)
-        y = np.random.randint(h)
-        x = np.random.randint(w)
-
-        y1 = np.clip(y - self.length // 2, 0, h)
-        y2 = np.clip(y + self.length // 2, 0, h)
-        x1 = np.clip(x - self.length // 2, 0, w)
-        x2 = np.clip(x + self.length // 2, 0, w)
-
-        mask[y1: y2, x1: x2] = 0.
-        mask = torch.from_numpy(mask)
-        mask = mask.expand_as(img)
-        img *= mask
-        return img
+#     for net_i, dataidx in net_dataidx_map.items():
+#         unq, unq_cnt = np.unique(y_train[dataidx], return_counts=True)
+#         tmp = {unq[i]: unq_cnt[i] for i in range(len(unq))}
+#         net_cls_counts[net_i] = tmp
+#     logging.debug('Data statistics: %s' % str(net_cls_counts))
+#     return net_cls_counts
 
 
-def _data_transforms_cifar10():
-    # CIFAR_MEAN = [0.49139968, 0.48215827, 0.44653124]
-    # CIFAR_STD = [0.24703233, 0.24348505, 0.26158768]
+def _data_transforms_emnist():
 
-    # train_transform = transforms.Compose([
-    #     transforms.ToPILImage(),
-    #     transforms.RandomCrop(32, padding=4),
-    #     transforms.RandomHorizontalFlip(),
-    #     transforms.ToTensor(),
-    #     transforms.Normalize(CIFAR_MEAN, CIFAR_STD),
-    # ])
-
-    # train_transform.transforms.append(Cutout(16))
-
-    # valid_transform = transforms.Compose([
-    #     transforms.ToTensor(),
-    #     transforms.Normalize(CIFAR_MEAN, CIFAR_STD),
-    # ])
-    train_transform = transforms.Compose([transforms.ToPILImage(),
-                                        transforms.Resize((70, 70)),
-                                       transforms.RandomCrop((64, 64)),
-                                       transforms.ToTensor()])
+    train_transform = transforms.Compose([
+                    transforms.ToPILImage(),
+                    transforms.RandomCrop(28, padding=4),
+                    transforms.RandomHorizontalFlip(),
+                    # lambda img: transforms.functional.rotate(img, -90),
+                    # lambda img: transforms.functional.hflip(img),
+                    transforms.ToTensor()
+                ])
 
     valid_transform = transforms.Compose([
-        transforms.ToPILImage(),transforms.Resize((70, 70)),
-                                      transforms.CenterCrop((64, 64)),
-                                      transforms.ToTensor()])
+                    transforms.ToPILImage(),
+                    transforms.RandomCrop(28),
+                    transforms.RandomHorizontalFlip(),
+                    # lambda img: transforms.functional.rotate(img, -90),
+                    # lambda img: transforms.functional.hflip(img),
+                    transforms.ToTensor()
+                ])
 
     return train_transform, valid_transform
 
+def load_emnist_data(datadir):
+    train_transform, test_transform = _data_transforms_emnist()
 
-def load_cifar10_data(datadir):
-    train_transform, test_transform = _data_transforms_cifar10()
+    global train_dataset_global
+    global test_dataset_global
 
-    cifar10_train_ds = CIFAR10_truncated(datadir, train=True, download=False, transform=train_transform)
-    cifar10_test_ds = CIFAR10_truncated(datadir, train=False, download=False, transform=test_transform)
+    train_dataset_global = EMNIST(datadir,split="byclass", train=True, download=False, transform=train_transform)
+    test_dataset_global = EMNIST(datadir,split="byclass", train=False, download=False, transform=train_transform)
 
-    X_train, y_train = cifar10_train_ds.data, cifar10_train_ds.target
-    X_test, y_test = cifar10_test_ds.data, cifar10_test_ds.target
+    emnist_train_ds = EMNIST_truncated(None,train_dataset_global)
+    emnist_test_ds = EMNIST_truncated(None,test_dataset_global)
+
+    X_train, y_train = emnist_train_ds.data, emnist_train_ds.target
+    X_test, y_test = emnist_test_ds.data, emnist_test_ds.target
 
     return (X_train, y_train, X_test, y_test)
 
 
 def partition_data(dataset, datadir, partition, n_nets, alpha):
     logging.info("*********partition data***************")
-    X_train, y_train, X_test, y_test = load_cifar10_data(datadir)
+    X_train, y_train, X_test, y_test = load_emnist_data(datadir)
     n_train = X_train.shape[0]
     # n_test = X_test.shape[0]
 
@@ -133,9 +111,9 @@ def partition_data(dataset, datadir, partition, n_nets, alpha):
 
     elif partition == "hetero":
         min_size = 0
-        K = 10
+        K = len(np.unique(y_train))
         N = y_train.shape[0]
-        logging.info("N = " + str(N))
+        logging.info("N = {},K = {} ".format(N,K) )
         net_dataidx_map = {}
 
         while min_size < 100:
@@ -156,40 +134,40 @@ def partition_data(dataset, datadir, partition, n_nets, alpha):
             np.random.shuffle(idx_batch[j])
             net_dataidx_map[j] = idx_batch[j]
 
-    elif partition == "hetero-fix":
-        dataidx_map_file_path = './data_preprocessing/non-iid-distribution/CIFAR10/net_dataidx_map.txt'
-        net_dataidx_map = read_net_dataidx_map(dataidx_map_file_path)
+    # elif partition == "hetero-fix":
+    #     dataidx_map_file_path = './data_preprocessing/non-iid-distribution/emnist/net_dataidx_map.txt'
+    #     net_dataidx_map = read_net_dataidx_map(dataidx_map_file_path)
 
-    if partition == "hetero-fix":
-        distribution_file_path = './data_preprocessing/non-iid-distribution/CIFAR10/distribution.txt'
-        traindata_cls_counts = read_data_distribution(distribution_file_path)
-    else:
-        traindata_cls_counts = record_net_data_stats(y_train, net_dataidx_map)
+    # if partition == "hetero-fix":
+    #     distribution_file_path = './data_preprocessing/non-iid-distribution/emnist/distribution.txt'
+    #     traindata_cls_counts = read_data_distribution(distribution_file_path)
+    # else:
+    #     traindata_cls_counts = record_net_data_stats(y_train, net_dataidx_map)
 
-    return X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts
+    return X_train, y_train, X_test, y_test, net_dataidx_map, "traindata_cls_counts"
 
 
 # for centralized training
 def get_dataloader(dataset, datadir, train_bs, test_bs, dataidxs=None):
-    return get_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs)
+    return get_dataloader_emnist(datadir, train_bs, test_bs, dataidxs)
 
 
 # for local devices
 def get_dataloader_test(dataset, datadir, train_bs, test_bs, dataidxs_train, dataidxs_test):
-    return get_dataloader_test_CIFAR10(datadir, train_bs, test_bs, dataidxs_train, dataidxs_test)
+    return get_dataloader_test_emnist(datadir, train_bs, test_bs, dataidxs_train, dataidxs_test)
 
 
-def get_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs=None):
-    dl_obj = CIFAR10_truncated
+def get_dataloader_emnist(datadir, train_bs, test_bs, dataidxs=None):
 
-    transform_train, transform_test = _data_transforms_cifar10()
+    global train_dataset_global
+    global test_dataset_global
 
-    if dataidxs is not None:
-        while len(dataidxs) < train_bs:
-            dataidxs += dataidxs
+    dl_obj = EMNIST_truncated
 
-    train_ds = dl_obj(datadir, dataidxs=dataidxs, train=True, transform=transform_train, download=False)
-    test_ds = dl_obj(datadir, train=False, transform=transform_test, download=False)
+    transform_train, transform_test = _data_transforms_emnist()
+
+    train_ds = dl_obj(dataidxs,train_dataset_global)
+    test_ds = dl_obj(None,test_dataset_global)
 
     train_dl = data.DataLoader(dataset=train_ds, batch_size=train_bs, shuffle=True, drop_last=True)
     test_dl = data.DataLoader(dataset=test_ds, batch_size=test_bs, shuffle=False, drop_last=True)
@@ -197,10 +175,10 @@ def get_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs=None):
     return train_dl, test_dl
 
 
-def get_dataloader_test_CIFAR10(datadir, train_bs, test_bs, dataidxs_train=None, dataidxs_test=None):
-    dl_obj = CIFAR10_truncated
+def get_dataloader_test_emnist(datadir, train_bs, test_bs, dataidxs_train=None, dataidxs_test=None):
+    dl_obj = EMNIST_truncated
 
-    transform_train, transform_test = _data_transforms_cifar10()
+    transform_train, transform_test = _data_transforms_emnist()
 
     train_ds = dl_obj(datadir, dataidxs=dataidxs_train, train=True, transform=transform_train, download=False)
     test_ds = dl_obj(datadir, dataidxs=dataidxs_test, train=False, transform=transform_test, download=False)
@@ -211,7 +189,7 @@ def get_dataloader_test_CIFAR10(datadir, train_bs, test_bs, dataidxs_train=None,
     return train_dl, test_dl
 
 
-def load_partition_data_distributed_cifar10(process_id, dataset, data_dir, partition_method, partition_alpha,
+def load_partition_data_distributed_emnist(process_id, dataset, data_dir, partition_method, partition_alpha,
                                             client_number, batch_size):
     X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts = partition_data(dataset,
                                                                                              data_dir,
@@ -226,7 +204,7 @@ def load_partition_data_distributed_cifar10(process_id, dataset, data_dir, parti
     if process_id == 0:
         train_data_global, test_data_global = get_dataloader(dataset, data_dir, batch_size, batch_size)
         logging.info("train_dl_global number = " + str(len(train_data_global)))
-        logging.info("test_dl_global number = " + str(len(test_data_global)))
+        logging.info("test_dl_global number = " + str(len(train_data_global)))
         train_data_local = None
         test_data_local = None
         local_data_num = 0
@@ -242,10 +220,11 @@ def load_partition_data_distributed_cifar10(process_id, dataset, data_dir, parti
             process_id, len(train_data_local), len(test_data_local)))
         train_data_global = None
         test_data_global = None
+
     return train_data_num, train_data_global, test_data_global, local_data_num, train_data_local, test_data_local, class_num
 
 
-def load_partition_data_cifar10(dataset, data_dir, partition_method, partition_alpha, client_number, batch_size, silo_proc_num=0):
+def load_partition_data_emnist(dataset, data_dir, partition_method, partition_alpha, client_number, batch_size):
     X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts = partition_data(dataset,
                                                                                              data_dir,
                                                                                              partition_method,
@@ -257,7 +236,7 @@ def load_partition_data_cifar10(dataset, data_dir, partition_method, partition_a
 
     train_data_global, test_data_global = get_dataloader(dataset, data_dir, batch_size, batch_size)
     logging.info("train_dl_global number = " + str(len(train_data_global)))
-    logging.info("test_dl_global number = " + str(len(test_data_global)))
+    logging.info("test_dl_global number = " + str(len(train_data_global)))
     test_data_num = len(test_data_global)
 
     # get local dataset
@@ -271,11 +250,11 @@ def load_partition_data_cifar10(dataset, data_dir, partition_method, partition_a
         data_local_num_dict[client_idx] = local_data_num
         logging.info("client_idx = %d, local_sample_number = %d" % (client_idx, local_data_num))
 
-            # training batch size = 64; algorithms batch size = 32
+        # training batch size = 64; algorithms batch size = 32
         train_data_local, test_data_local = get_dataloader(dataset, data_dir, batch_size, batch_size,
-                                                    dataidxs)
+                                                 dataidxs)
         logging.info("client_idx = %d, batch_num_train_local = %d, batch_num_test_local = %d" % (
-                client_idx, len(train_data_local), len(test_data_local)))
+            client_idx, len(train_data_local), len(test_data_local)))
         train_data_local_dict[client_idx] = train_data_local
         test_data_local_dict[client_idx] = test_data_local
     return train_data_num, test_data_num, train_data_global, test_data_global, \
@@ -305,10 +284,20 @@ def get_client_dataloader(data_dir, batch_size, net_dataidx_map, val_batchsize =
         val_data_local, test_data_local = get_dataloader("", data_dir, val_batchsize, val_batchsize,
                                                  val_idx)
 
-        logging.info("train batch: {0},val batch: {1}".format(len(train_data_local),len(val_data_local)))
+        logging.info("train batch: {},val batch: {}".format(len(train_data_local),len(val_data_local)))
         return train_data_local, val_data_local
     else:
         train_data_global, test_data_global = get_dataloader("", data_dir, batch_size, batch_size)
         return test_data_global
 
 
+if __name__ == '__main__':
+    data_dir = '/mnt/data/th/FedTH/data/emnist'
+    # data_dir = '/home/datasets/imagenet/imagenet_hdf5/imagenet-shuffled.hdf5'
+
+    client_number = 100
+
+    dict_client_idexes, num_classes = get_client_idxes_dict(data_dir, 'hetero', 0.2, 100)
+    test_dl = get_client_dataloader(data_dir, 64, dict_client_idexes,train=False)
+
+    train_dl_local, val_dl_local  = get_client_dataloader(data_dir, 64, dict_client_idexes, client_idx = 0)

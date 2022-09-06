@@ -147,3 +147,56 @@ def load_partition_data_federated_cifar100(dataset, data_dir, batch_size=DEFAULT
 
     return DEFAULT_TRAIN_CLIENTS_NUM, train_data_num, test_data_num, train_data_global, test_data_global, \
         data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num
+
+def get_client_dataloader_fed(data_dir, client_idx ,dataset = "", batch_size = DEFAULT_BATCH_SIZE, ):
+    train_data_local, test_data_local = get_dataloader(
+            dataset, data_dir, batch_size, batch_size, client_idx)
+        
+    return train_data_local,test_data_local
+
+def get_global_dataloader(data_dir,batch_size =DEFAULT_BATCH_SIZE ,dataidx = None):
+    class_num = 100
+    dataset = ""
+    
+    # get local dataset
+    data_local_num_dict = dict()
+    train_data_local_dict = dict()
+    test_data_local_dict = dict()
+    
+    for client_idx in range(dataidx):
+        train_data_local, test_data_local = get_dataloader(
+            dataset, data_dir, batch_size, batch_size, client_idx)
+        local_data_num = len(train_data_local.dataset)
+        data_local_num_dict[client_idx] = local_data_num
+        logging.info("client_idx = %d, local_sample_number = %d" % (client_idx, local_data_num))
+        logging.info("client_idx = %d, batch_num_train_local = %d" % (client_idx, len(train_data_local)))
+        train_data_local_dict[client_idx] = train_data_local
+        test_data_local_dict[client_idx] = test_data_local
+    
+    # global dataset
+    train_data_global = data.DataLoader(
+                data.ConcatDataset(
+                    list(dl.dataset for dl in list(train_data_local_dict.values()))
+                ),
+                batch_size=batch_size, shuffle=True)
+    
+    test_data_global = data.DataLoader(
+                data.ConcatDataset(
+                    list(dl.dataset for dl in list(test_data_local_dict.values()) if dl is not None)
+                ),
+                batch_size=batch_size, shuffle=True)
+
+
+    return train_data_global, test_data_global
+
+def init(data_dir):
+    class_num = 100
+
+    #client id list
+    train_file_path = os.path.join(data_dir, DEFAULT_TRAIN_FILE)
+    test_file_path = os.path.join(data_dir, DEFAULT_TEST_FILE)
+    with h5py.File(train_file_path, 'r') as train_h5, h5py.File(test_file_path, 'r') as test_h5:
+        global client_ids_train, client_ids_test
+        client_ids_train = list(train_h5[_EXAMPLE].keys())
+        client_ids_test = list(test_h5[_EXAMPLE].keys())
+

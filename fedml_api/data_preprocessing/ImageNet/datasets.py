@@ -80,7 +80,7 @@ def default_loader(path):
 
 class ImageNet(data.Dataset):
 
-    def __init__(self, data_dir, dataidxs=None, train=True, transform=None, target_transform=None, download=False):
+    def __init__(self, data_dir, dataidxs=None, train=True, transform=None, target_transform=None, download=False,classes = []):
         """
             Generating this class too many times will be time-consuming.
             So it will be better calling this once and put it into ImageNet_truncated.
@@ -91,12 +91,16 @@ class ImageNet(data.Dataset):
         self.target_transform = target_transform
         self.download = download
         self.loader = default_loader
+        self.classes = classes
         if self.train:
             self.data_dir = os.path.join(data_dir, 'train')
         else:
             self.data_dir = os.path.join(data_dir, 'val')
 
         self.all_data, self.data_local_num_dict, self.net_dataidx_map = self.__getdatasets__()
+        if len(self.classes):
+            temp_dict = {key:value for key,value in self.net_dataidx_map.items() if key in self.classes}
+            self.net_dataidx_map = temp_dict
         if dataidxs == None:
             self.local_data = self.all_data
         elif type(dataidxs) == int:
@@ -174,8 +178,7 @@ class ImageNet_truncated(data.Dataset):
         else:
             self.local_data = []
             for idxs in dataidxs:
-                (begin, end) = self.net_dataidx_map[idxs]
-                self.local_data += self.all_data[begin: end]
+                self.local_data += [(self.all_data[idxs])]
 
     def __getitem__(self, index):
         """
