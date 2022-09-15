@@ -77,32 +77,32 @@ class Cutout(object):
 
 
 def _data_transforms_cifar10():
-    # CIFAR_MEAN = [0.49139968, 0.48215827, 0.44653124]
-    # CIFAR_STD = [0.24703233, 0.24348505, 0.26158768]
+    CIFAR_MEAN = [0.49139968, 0.48215827, 0.44653124]
+    CIFAR_STD = [0.24703233, 0.24348505, 0.26158768]
 
-    # train_transform = transforms.Compose([
-    #     transforms.ToPILImage(),
-    #     transforms.RandomCrop(32, padding=4),
-    #     transforms.RandomHorizontalFlip(),
-    #     transforms.ToTensor(),
-    #     transforms.Normalize(CIFAR_MEAN, CIFAR_STD),
-    # ])
+    train_transform = transforms.Compose([
+        transforms.ToPILImage(),
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize(CIFAR_MEAN, CIFAR_STD),
+    ])
 
-    # train_transform.transforms.append(Cutout(16))
-
-    # valid_transform = transforms.Compose([
-    #     transforms.ToTensor(),
-    #     transforms.Normalize(CIFAR_MEAN, CIFAR_STD),
-    # ])
-    train_transform = transforms.Compose([transforms.ToPILImage(),
-                                        transforms.Resize((70, 70)),
-                                       transforms.RandomCrop((64, 64)),
-                                       transforms.ToTensor()])
+    train_transform.transforms.append(Cutout(16))
 
     valid_transform = transforms.Compose([
-        transforms.ToPILImage(),transforms.Resize((70, 70)),
-                                      transforms.CenterCrop((64, 64)),
-                                      transforms.ToTensor()])
+        transforms.ToTensor(),
+        transforms.Normalize(CIFAR_MEAN, CIFAR_STD),
+    ])
+    # train_transform = transforms.Compose([transforms.ToPILImage(),
+    #                                     transforms.Resize((70, 70)),
+    #                                    transforms.RandomCrop((64, 64)),
+    #                                    transforms.ToTensor()])
+
+    # valid_transform = transforms.Compose([
+    #     transforms.ToPILImage(),transforms.Resize((70, 70)),
+    #                                   transforms.CenterCrop((64, 64)),
+    #                                   transforms.ToTensor()])
 
     return train_transform, valid_transform
 
@@ -291,7 +291,7 @@ def get_client_idxes_dict( data_dir, partition_method, partition_alpha, client_n
     logging.info("traindata_cls_counts = " + str(traindata_cls_counts))
     train_data_num = sum([len(net_dataidx_map[r]) for r in range(client_number)])
     logging.info("total data num = " + str(train_data_num))
-    return net_dataidx_map,class_num
+    return net_dataidx_map,class_num,traindata_cls_counts
 
 
 def get_client_dataloader(data_dir, batch_size, net_dataidx_map, val_batchsize = 16, client_idx = None,train = True):

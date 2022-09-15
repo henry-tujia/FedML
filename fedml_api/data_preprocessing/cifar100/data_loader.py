@@ -287,7 +287,7 @@ def get_client_idxes_dict( data_dir, partition_method, partition_alpha, client_n
     logging.info("traindata_cls_counts = " + str(traindata_cls_counts))
     train_data_num = sum([len(net_dataidx_map[r]) for r in range(client_number)])
     logging.info("total data num = " + str(train_data_num))
-    return net_dataidx_map,class_num
+    return net_dataidx_map,class_num,traindata_cls_counts
 
 
 def get_client_dataloader(data_dir, batch_size, net_dataidx_map, val_batchsize = 16, client_idx = None,train = True):
