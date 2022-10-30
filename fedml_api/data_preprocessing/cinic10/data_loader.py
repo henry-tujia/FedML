@@ -354,15 +354,15 @@ def get_client_dataloader(data_dir, batch_size, net_dataidx_map, val_batchsize =
     
     if train:
         dataidxs = net_dataidx_map[client_idx]
-        train_idx = dataidxs[:int(len(dataidxs)*0.9)]
-        val_idx = dataidxs[int(len(dataidxs)*0.9):]
+        # train_idx = dataidxs[:int(len(dataidxs)*0.9)]
+        # val_idx = dataidxs[int(len(dataidxs)*0.9):]
         train_data_local, test_data_local = get_dataloader("", data_dir, batch_size, batch_size,
-                                                 train_idx)
-        val_data_local, test_data_local = get_dataloader("", data_dir, val_batchsize, val_batchsize,
-                                                 val_idx)
+                                                 dataidxs)
+        # val_data_local, test_data_local = get_dataloader("", data_dir, val_batchsize, val_batchsize,
+        #                                          val_idx)
 
-        logging.info("train batch: {0},val batch: {1}".format(len(train_data_local),len(val_data_local)))
-        return train_data_local, val_data_local
+        logging.info("train batch: {0},val batch: {1}".format(len(train_data_local),len(test_data_local)))
+        return train_data_local, test_data_local
     else:
         train_data_global, test_data_global = get_dataloader("", data_dir, batch_size, batch_size)
         return test_data_global

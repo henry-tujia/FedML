@@ -184,10 +184,6 @@ def get_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs=None):
 
     transform_train, transform_test = _data_transforms_cifar10()
 
-    if dataidxs is not None:
-        while len(dataidxs) < train_bs:
-            dataidxs += dataidxs
-
     train_ds = dl_obj(datadir, dataidxs=dataidxs, train=True, transform=transform_train, download=False)
     test_ds = dl_obj(datadir, train=False, transform=transform_test, download=False)
 
@@ -198,7 +194,7 @@ def get_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs=None):
 
 
 def get_dataloader_test_CIFAR10(datadir, train_bs, test_bs, dataidxs_train=None, dataidxs_test=None):
-    dl_obj = CIFAR10_truncated
+    dl_obj = CIFAR10_truncated 
 
     transform_train, transform_test = _data_transforms_cifar10()
 
@@ -298,15 +294,15 @@ def get_client_dataloader(data_dir, batch_size, net_dataidx_map, val_batchsize =
     
     if train:
         dataidxs = net_dataidx_map[client_idx]
-        train_idx = dataidxs[:int(len(dataidxs)*0.9)]
-        val_idx = dataidxs[int(len(dataidxs)*0.9):]
+        # train_idx = dataidxs[:int(len(dataidxs)*0.9)]
+        # val_idx = dataidxs[int(len(dataidxs)*0.9):]
         train_data_local, test_data_local = get_dataloader("", data_dir, batch_size, batch_size,
-                                                 train_idx)
-        val_data_local, test_data_local = get_dataloader("", data_dir, val_batchsize, val_batchsize,
-                                                 val_idx)
+                                                 dataidxs)
+        # val_data_local, test_data_local = get_dataloader("", data_dir, val_batchsize, val_batchsize,
+        #                                          val_idx)
 
-        logging.info("train batch: {0},val batch: {1}".format(len(train_data_local),len(val_data_local)))
-        return train_data_local, val_data_local
+        logging.info("train batch: {0},val batch: {1}".format(len(train_data_local),len(test_data_local)))
+        return train_data_local, test_data_local
     else:
         train_data_global, test_data_global = get_dataloader("", data_dir, batch_size, batch_size)
         return test_data_global
