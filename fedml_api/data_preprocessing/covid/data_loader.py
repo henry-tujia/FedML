@@ -1,11 +1,14 @@
 import logging
+import os
+import random
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 import torch.utils.data as data
 import torchvision.transforms as transforms
 
-from .datasets import CIFAR10_truncated
+from .datasets import ImageFolderLMDB
 
 # logging.basicConfig()
 logger = logging.getLogger()
@@ -55,78 +58,73 @@ def record_net_data_stats(y_train, net_dataidx_map):
     return net_cls_counts
 
 
-class Cutout(object):
-    def __init__(self, length):
-        self.length = length
+def _data_transforms_covid(lmdb=False):
 
-    def __call__(self, img):
-        h, w = img.size(1), img.size(2)
-        mask = np.ones((h, w), np.float32)
-        y = np.random.randint(h)
-        x = np.random.randint(w)
-
-        y1 = np.clip(y - self.length // 2, 0, h)
-        y2 = np.clip(y + self.length // 2, 0, h)
-        x1 = np.clip(x - self.length // 2, 0, w)
-        x2 = np.clip(x + self.length // 2, 0, w)
-
-        mask[y1: y2, x1: x2] = 0.
-        mask = torch.from_numpy(mask)
-        mask = mask.expand_as(img)
-        img *= mask
-        return img
-
-
-def _data_transforms_cifar10():
-    CIFAR_MEAN = [0.49139968, 0.48215827, 0.44653124]
-    CIFAR_STD = [0.24703233, 0.24348505, 0.26158768]
-
-    train_transform = transforms.Compose([
-        transforms.ToPILImage(),
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize(CIFAR_MEAN, CIFAR_STD),
-    ])
-
-    train_transform.transforms.append(Cutout(16))
-
-    valid_transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize(CIFAR_MEAN, CIFAR_STD),
-    ])
-    # train_transform = transforms.Compose([transforms.ToPILImage(),
-    #                                     transforms.Resize((70, 70)),
-    #                                    transforms.RandomCrop((64, 64)),
-    #                                    transforms.ToTensor()])
+    # cinic_mean = [0.47889522, 0.47227842, 0.43047404]
+    # cinic_std = [0.24205776, 0.23828046, 0.25874835]
+    # # normalize = transforms.Normalize(mean=cinic_mean, std=cinic_std)
 
     # valid_transform = transforms.Compose([
-    #     transforms.ToPILImage(),transforms.Resize((70, 70)),
-    #                                   transforms.CenterCrop((64, 64)),
-    #                                   transforms.ToTensor()])
+    #     transforms.ToTensor(),
+    #     transforms.Normalize(mean=cinic_mean, std=cinic_std)
+    # ])
 
+    # train_transform = transforms.Compose([
+    #     transforms.RandomCrop(32, padding=4),
+    #     transforms.RandomHorizontalFlip(),
+    #     transforms.ToTensor(),
+    #     transforms.Normalize(mean=cinic_mean, std=cinic_std)
+    # ])
+
+    # Transformer for train set: random crops and horizontal flip
+    train_transform = transforms.Compose([transforms.Resize([32, 32]),
+                                          transforms.ToTensor()
+                                          ])
+    #   [transforms.Lambda(
+    #       lambda x: F.pad(x.unsqueeze(0),
+    #                       (4, 4, 4, 4),
+    #
+
+    # Transformer for test set
+    valid_transform = transforms.Compose([transforms.Resize([32, 32]),
+                                          transforms.ToTensor()
+                                          ])  # transforms.Lambda(
+    #   lambda x: F.pad(x.unsqueeze(0),
+    #                   (4, 4, 4, 4),
+    #                   mode='reflect').data.squeeze()),
     return train_transform, valid_transform
 
 
-def load_cifar10_data(datadir):
-    train_transform, test_transform = _data_transforms_cifar10()
+def load_covid_data(datadir, lmdb=False):
+    _train_dir = datadir + str('/COVID-19_Radiography_Dataset/train')
+    logging.info("_train_dir = " + str(_train_dir))
+    _test_dir = datadir + str('/COVID-19_Radiography_Dataset/test')
 
-    cifar10_train_ds = CIFAR10_truncated(
-        datadir, train=True, download=False, transform=train_transform)
-    cifar10_test_ds = CIFAR10_truncated(
-        datadir, train=False, download=False, transform=test_transform)
+    if lmdb:
+        trainset = ImageFolderLMDB(_train_dir, transform=transforms.Compose([transforms.Resize([32, 32]),
+                                                                             transforms.ToTensor()
+                                                                             ]))
+        testset = ImageFolderLMDB(_test_dir, transform=transforms.Compose([transforms.Resize([32, 32]),
+                                                                           transforms.ToTensor()
+                                                                           ]))
 
-    X_train, y_train = cifar10_train_ds.data, cifar10_train_ds.target
-    X_test, y_test = cifar10_test_ds.data, cifar10_test_ds.target
-
+    X_train, y_train = trainset.imgs, trainset.targets
+    X_test, y_test = testset.imgs, testset.targets
     return (X_train, y_train, X_test, y_test)
 
 
-def partition_data(dataset, datadir, partition, n_nets, alpha):
+def partition_data(dataset, datadir, partition, n_nets, alpha, lmdb):
     logging.info("*********partition data***************")
-    X_train, y_train, X_test, y_test = load_cifar10_data(datadir)
-    n_train = X_train.shape[0]
-    # n_test = X_test.shape[0]
+    pil_logger = logging.getLogger('PIL')
+    pil_logger.setLevel(logging.INFO)
+
+    X_train, y_train, X_test, y_test = load_covid_data(datadir, lmdb=lmdb)
+    X_train = np.array(X_train)
+    X_test = np.array(X_test)
+    y_train = np.array(y_train, dtype=(int))
+    y_test = np.array(y_test)
+    n_train = len(y_train)
+    # n_test = len(X_test)
 
     if partition == "homo":
         total_num = n_train
@@ -136,12 +134,13 @@ def partition_data(dataset, datadir, partition, n_nets, alpha):
 
     elif partition == "hetero":
         min_size = 0
-        K = 10
+        K = 4
         N = y_train.shape[0]
         logging.info("N = " + str(N))
         net_dataidx_map = {}
 
         while min_size < 64:
+            print(min_size)
             idx_batch = [[] for _ in range(n_nets)]
             # for each class in the dataset
             for k in range(K):
@@ -149,11 +148,11 @@ def partition_data(dataset, datadir, partition, n_nets, alpha):
                 np.random.shuffle(idx_k)
                 proportions = np.random.dirichlet(np.repeat(alpha, n_nets))
                 # Balance
-                proportions = np.array(
-                    [p * (len(idx_j) < N / n_nets) for p, idx_j in zip(proportions, idx_batch)])
+                proportions = np.array([p * (len(idx_j) < N / n_nets)
+                                       for p, idx_j in zip(proportions, idx_batch)])
                 proportions = proportions / proportions.sum()
                 proportions = (np.cumsum(proportions) *
-                               len(idx_k)).astype(int)[:-1]
+                               len(idx_k)).astype(int)[: -1]
                 idx_batch = [idx_j + idx.tolist() for idx_j,
                              idx in zip(idx_batch, np.split(idx_k, proportions))]
                 min_size = min([len(idx_j) for idx_j in idx_batch])
@@ -161,11 +160,10 @@ def partition_data(dataset, datadir, partition, n_nets, alpha):
         for j in range(n_nets):
             np.random.shuffle(idx_batch[j])
             net_dataidx_map[j] = idx_batch[j]
-
     elif "label" in partition:
         num = eval(partition[5:])
-        K = 10
-        if num == 10:
+        K = 4
+        if num == 4:
             net_dataidx_map = {i: np.ndarray(
                 0, dtype=np.int64) for i in range(n_nets)}
             for i in range(10):
@@ -185,7 +183,7 @@ def partition_data(dataset, datadir, partition, n_nets, alpha):
                 for j in temp:
                     classes_count[j] += 1
                 classes_nets.append(temp)
-            for index, clss_partition in enumerate(classes_count):
+            for index,clss_partition in enumerate(classes_count):
                 if clss_partition == 0:
                     continue
                 idx_k = np.where(y_train == index)[0]
@@ -198,11 +196,11 @@ def partition_data(dataset, datadir, partition, n_nets, alpha):
                             net_dataidx_map[net_idx], split[index_in])
                         index_in += 1
     elif partition == "hetero-fix":
-        dataidx_map_file_path = './data_preprocessing/non-iid-distribution/CIFAR10/net_dataidx_map.txt'
+        dataidx_map_file_path = './data_preprocessing/non-iid-distribution/covid/net_dataidx_map.txt'
         net_dataidx_map = read_net_dataidx_map(dataidx_map_file_path)
 
     if partition == "hetero-fix":
-        distribution_file_path = './data_preprocessing/non-iid-distribution/CIFAR10/distribution.txt'
+        distribution_file_path = './data_preprocessing/non-iid-distribution/covid/distribution.txt'
         traindata_cls_counts = read_data_distribution(distribution_file_path)
     else:
         traindata_cls_counts = record_net_data_stats(y_train, net_dataidx_map)
@@ -211,42 +209,26 @@ def partition_data(dataset, datadir, partition, n_nets, alpha):
 
 
 # for centralized training
-def get_dataloader(dataset, datadir, train_bs, test_bs, dataidxs=None):
-    return get_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs)
+def get_dataloader(dataset, datadir, train_bs, test_bs, dataidxs=None, lmdb=False):
+    return get_dataloader_covid(datadir, train_bs, test_bs, dataidxs, lmdb=lmdb)
 
 
-# for local devices
-def get_dataloader_test(dataset, datadir, train_bs, test_bs, dataidxs_train, dataidxs_test):
-    return get_dataloader_test_CIFAR10(datadir, train_bs, test_bs, dataidxs_train, dataidxs_test)
+# # for local devices
+# def get_dataloader_test(dataset, datadir, train_bs, test_bs, dataidxs_train, dataidxs_test):
+#     return get_dataloader_test_covid(datadir, train_bs, test_bs, dataidxs_train, dataidxs_test)
 
 
-def get_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs=None):
-    dl_obj = CIFAR10_truncated
+def get_dataloader_covid(datadir, train_bs, test_bs, dataidxs=None, lmdb=False):
+    if lmdb:
+        dl_obj = ImageFolderLMDB
 
-    transform_train, transform_test = _data_transforms_cifar10()
+    transform_train, transform_test = _data_transforms_covid(lmdb)
 
-    train_ds = dl_obj(datadir, dataidxs=dataidxs, train=True,
-                      transform=transform_train, download=False)
-    test_ds = dl_obj(datadir, train=False,
-                     transform=transform_test, download=False)
+    traindir = os.path.join(datadir, 'COVID-19_Radiography_Dataset/train')
+    valdir = os.path.join(datadir, 'COVID-19_Radiography_Dataset/test')
 
-    train_dl = data.DataLoader(
-        dataset=train_ds, batch_size=train_bs, shuffle=True, drop_last=True)
-    test_dl = data.DataLoader(
-        dataset=test_ds, batch_size=test_bs, shuffle=False, drop_last=True)
-
-    return train_dl, test_dl
-
-
-def get_dataloader_test_CIFAR10(datadir, train_bs, test_bs, dataidxs_train=None, dataidxs_test=None):
-    dl_obj = CIFAR10_truncated
-
-    transform_train, transform_test = _data_transforms_cifar10()
-
-    train_ds = dl_obj(datadir, dataidxs=dataidxs_train,
-                      train=True, transform=transform_train, download=False)
-    test_ds = dl_obj(datadir, dataidxs=dataidxs_test, train=False,
-                     transform=transform_test, download=False)
+    train_ds = dl_obj(traindir, dataidxs=dataidxs, transform=transform_train)
+    test_ds = dl_obj(valdir, transform=transform_train)
 
     train_dl = data.DataLoader(
         dataset=train_ds, batch_size=train_bs, shuffle=True, drop_last=True)
@@ -256,8 +238,31 @@ def get_dataloader_test_CIFAR10(datadir, train_bs, test_bs, dataidxs_train=None,
     return train_dl, test_dl
 
 
-def load_partition_data_distributed_cifar10(process_id, dataset, data_dir, partition_method, partition_alpha,
-                                            client_number, batch_size):
+# def get_dataloader_test_covid(datadir, train_bs, test_bs, dataidxs_train=None, dataidxs_test=None, transform=True):
+#     dl_obj = ImageFolderTruncated
+
+#     if transform:
+#         transform_train, transform_test = _data_transforms_covid()
+#     else:
+#         transform_train, transform_test = None, None
+
+#     traindir = os.path.join(datadir, 'train')
+#     valdir = os.path.join(datadir, 'test')
+
+#     train_ds = dl_obj(traindir, dataidxs=dataidxs_train,
+#                       transform=transform_train)
+#     test_ds = dl_obj(valdir, dataidxs=dataidxs_test, transform=transform_test)
+
+#     train_dl = data.DataLoader(
+#         dataset=train_ds, batch_size=train_bs, shuffle=True, drop_last=True)
+#     test_dl = data.DataLoader(
+#         dataset=test_ds, batch_size=test_bs, shuffle=False, drop_last=True)
+
+#     return train_dl, test_dl
+
+
+def load_partition_data_distributed_covid(process_id, dataset, data_dir, partition_method, partition_alpha,
+                                          client_number, batch_size, lmdb="False"):
     X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts = partition_data(dataset,
                                                                                              data_dir,
                                                                                              partition_method,
@@ -273,7 +278,8 @@ def load_partition_data_distributed_cifar10(process_id, dataset, data_dir, parti
         train_data_global, test_data_global = get_dataloader(
             dataset, data_dir, batch_size, batch_size)
         logging.info("train_dl_global number = " + str(len(train_data_global)))
-        logging.info("test_dl_global number = " + str(len(test_data_global)))
+        logging.info("test_dl_global number = " + str(len(train_data_global)))
+        test_data_num = len(test_data_global)
         train_data_local = None
         test_data_local = None
         local_data_num = 0
@@ -288,12 +294,14 @@ def load_partition_data_distributed_cifar10(process_id, dataset, data_dir, parti
                                                            dataidxs)
         logging.info("process_id = %d, batch_num_train_local = %d, batch_num_test_local = %d" % (
             process_id, len(train_data_local), len(test_data_local)))
+        test_data_num = 0
         train_data_global = None
         test_data_global = None
-    return train_data_num, train_data_global, test_data_global, local_data_num, train_data_local, test_data_local, class_num
+
+    return train_data_num, test_data_num, train_data_global, test_data_global, local_data_num, train_data_local, test_data_local, class_num
 
 
-def load_partition_data_cifar10(dataset, data_dir, partition_method, partition_alpha, client_number, batch_size, silo_proc_num=0):
+def load_partition_data_covid(dataset, data_dir, partition_method, partition_alpha, client_number, batch_size):
     X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts = partition_data(dataset,
                                                                                              data_dir,
                                                                                              partition_method,
@@ -307,7 +315,7 @@ def load_partition_data_cifar10(dataset, data_dir, partition_method, partition_a
     train_data_global, test_data_global = get_dataloader(
         dataset, data_dir, batch_size, batch_size)
     logging.info("train_dl_global number = " + str(len(train_data_global)))
-    logging.info("test_dl_global number = " + str(len(test_data_global)))
+    logging.info("test_dl_global number = " + str(len(train_data_global)))
     test_data_num = len(test_data_global)
 
     # get local dataset
@@ -333,12 +341,12 @@ def load_partition_data_cifar10(dataset, data_dir, partition_method, partition_a
         data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num
 
 
-def get_client_idxes_dict(data_dir, partition_method, partition_alpha, client_number):
+def get_client_idxes_dict(data_dir, partition_method, partition_alpha, client_number, lmdb=True):
     X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts = partition_data("",
                                                                                              data_dir,
                                                                                              partition_method,
                                                                                              client_number,
-                                                                                             partition_alpha)
+                                                                                             partition_alpha, lmdb=lmdb)
     class_num = len(np.unique(y_train))
     logging.info("traindata_cls_counts = " + str(traindata_cls_counts))
     train_data_num = sum([len(net_dataidx_map[r])
@@ -347,14 +355,14 @@ def get_client_idxes_dict(data_dir, partition_method, partition_alpha, client_nu
     return net_dataidx_map, class_num, traindata_cls_counts
 
 
-def get_client_dataloader(data_dir, batch_size, net_dataidx_map, val_batchsize=16, client_idx=None, train=True):
+def get_client_dataloader(data_dir, batch_size, net_dataidx_map, val_batchsize=16, client_idx=None, train=True, lmdb=True):
 
     if train:
         dataidxs = net_dataidx_map[client_idx]
         # train_idx = dataidxs[:int(len(dataidxs)*0.9)]
         # val_idx = dataidxs[int(len(dataidxs)*0.9):]
         train_data_local, test_data_local = get_dataloader("", data_dir, batch_size, batch_size,
-                                                           dataidxs)
+                                                           dataidxs, lmdb=lmdb)
         # val_data_local, test_data_local = get_dataloader("", data_dir, val_batchsize, val_batchsize,
         #                                          val_idx)
 
@@ -363,5 +371,19 @@ def get_client_dataloader(data_dir, batch_size, net_dataidx_map, val_batchsize=1
         return train_data_local, test_data_local
     else:
         train_data_global, test_data_global = get_dataloader(
-            "", data_dir, batch_size, batch_size)
+            "", data_dir, batch_size, batch_size, lmdb=lmdb)
         return test_data_global
+
+
+if __name__ == "__main__":
+    path = "/mnt/data/th/FedTH/data/dataset/covid"
+
+    net_dataidx_map, class_num, traindata_cls_counts = get_client_idxes_dict(
+        path, "label2", 0.3, 10, True)
+
+    train_dl, test_dl = get_client_dataloader(
+        path, 64, net_dataidx_map, 64, 1, train=True, lmdb=True)
+    # for img, label in train_dl:
+    #     # pass
+    #     print(img.shape)
+    #     print(label.shape)

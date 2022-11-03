@@ -137,7 +137,7 @@ def partition_data(dataset, datadir, partition, n_nets, alpha):
         logging.info("N = " + str(N))
         net_dataidx_map = {}
 
-        while min_size < 100:
+        while min_size < 64 :
             idx_batch = [[] for _ in range(n_nets)]
             # for each class in the dataset
             for k in range(K):
